@@ -11,7 +11,7 @@ if (!empty($_SESSION['paciente'])) {
         </div>
         <div class="col-md-12">
             <?php
-            $facturas_paciente = zona_paciente_obtener_facturas($_SESSION['paciente']->paciente_token);
+            $facturas_paciente = zona_paciente_obtener_facturas($_SESSION['paciente']['paciente_token']);
             echo $facturas_paciente;
             ?>
         </div>

@@ -1,5 +1,4 @@
 <?php
-
 /*
   Plugin Name: Zona de Paciente
   Description: Plugin para gestionar la zona de pacientes.
@@ -21,19 +20,6 @@ function incluir_bootstrap() {
 }
 
 add_action('wp_enqueue_scripts', 'incluir_bootstrap');
-
-function conectar_bbdd_externa() {
-    // Configura los parámetros de conexión
-    $dbhost = 'neuroredacer.es';
-    $dbuser = 'neuroredacer';
-    $dbpass = 'Sjot#833';
-    $dbname = 'neuroredacer_web';
-
-    // Conéctate a la base de datos externa usando wpdb
-    $conexion_externa = new wpdb($dbuser, $dbpass, $dbname, $dbhost);
-
-    return $conexion_externa;
-}
 
 // Aquí puedes añadir tus funciones y hooks
 function crear_pagina_paciente() {
@@ -90,7 +76,26 @@ function contenido_zona_paciente() {
     // Aquí puedes añadir tu lógica para mostrar la zona de pacientes
     ob_start();
     if (!empty($_SESSION['paciente'])) {
-        include(plugin_dir_path(__FILE__) . 'panel-paciente.php');
+        switch ($_GET['action']) {
+            case "facturas":
+                include(plugin_dir_path(__FILE__) . 'facturas-paciente.php');
+                break;
+            case "bonos":
+                include(plugin_dir_path(__FILE__) . 'bonos-paciente.php');
+                break;
+            case "perfil":
+                include(plugin_dir_path(__FILE__) . 'perfil-paciente.php');
+                break;
+            case "mis-citas":
+                include(plugin_dir_path(__FILE__) . 'miscitas-paciente.php');
+                break;
+            case "avisos":
+                include(plugin_dir_path(__FILE__) . 'avisos-paciente.php');
+                break;
+            default:
+                include(plugin_dir_path(__FILE__) . 'panel-paciente.php');
+                break;
+        }
     } else {
         include(plugin_dir_path(__FILE__) . 'login-paciente.php');
     }
@@ -100,21 +105,23 @@ function contenido_zona_paciente() {
 add_shortcode('shortcode_zona_paciente', 'contenido_zona_paciente');
 
 function AccesoPacientes_Login($dni, $password) {
-    $conexion_externa = conectar_bbdd_externa();
 
-    // Escribe tu consulta SQL
-    $query = $conexion_externa->prepare("SELECT * FROM pacientes WHERE paciente_dni = %s", $dni);
-    $resultado = $conexion_externa->get_row($query);
-
-    // Comprueba si hay resultados
-    if (!empty($resultado)) {
-        if (password_verify($password, $resultado->paciente_pass)) {
-            return array("paciente_info" => $resultado);
+    $data = [
+        'dni' => $dni,
+        'pwd' => $password,
+        'controller' => 'login',
+        'action' => 'login'
+    ];
+    $responsejson = zona_paciente_apicall($data);
+    $response = json_decode($responsejson, true);
+    if (is_array($response)) {
+        if ($response['error'] === true) {
+            return array("error" => $response['msg_error']);
         } else {
-            return array("error" => 'INVALID_PASSWORD');
+            return array("paciente_info" => $response['paciente_info']);
         }
     } else {
-        return array("error" => 'DNI_NOT_FOUND');
+        return array("error" => 'RESPONSE_ERROR');
     }
 }
 
@@ -216,7 +223,6 @@ function zp_ApiCall($url) {
     curl_close($ch);
 }
 
-
 //Comprobar actualizacioes
 
 add_action('admin_menu', 'zona_paciente_add_admin_menu');
@@ -230,29 +236,28 @@ function zona_paciente_settings_init() {
     register_setting('zona_paciente', 'zona_paciente_settings');
 
     add_settings_section(
-        'zona_paciente_section',
-        __('Credenciales del Repositorio', 'zona_paciente'),
-        null,
-        'zona_paciente'
+            'zona_paciente_section',
+            __('Credenciales del Repositorio', 'zona_paciente'),
+            null,
+            'zona_paciente'
     );
 
     add_settings_field(
-        'zona_paciente_username',
-        __('Usuario', 'zona_paciente'),
-        'zona_paciente_username_render',
-        'zona_paciente',
-        'zona_paciente_section'
+            'zona_paciente_username',
+            __('Usuario', 'zona_paciente'),
+            'zona_paciente_username_render',
+            'zona_paciente',
+            'zona_paciente_section'
     );
 
     add_settings_field(
-        'zona_paciente_password',
-        __('Contraseña', 'zona_paciente'),
-        'zona_paciente_password_render',
-        'zona_paciente',
-        'zona_paciente_section'
+            'zona_paciente_password',
+            __('Contraseña', 'zona_paciente'),
+            'zona_paciente_password_render',
+            'zona_paciente',
+            'zona_paciente_section'
     );
 }
-
 
 function zona_paciente_username_render() {
     $options = get_option('zona_paciente_settings');
@@ -284,7 +289,8 @@ function zona_paciente_options_page() {
 add_filter('pre_set_site_transient_update_plugins', 'zona_paciente_comprobar_actualizacion');
 
 function zona_paciente_comprobar_actualizacion($transient) {
-    if (empty($transient->checked)) return $transient;
+    if (empty($transient->checked))
+        return $transient;
 
     // URL del archivo JSON
     $remote = wp_remote_get('https://tu-servidor.com/mi-plugin-update.json');
@@ -294,13 +300,48 @@ function zona_paciente_comprobar_actualizacion($transient) {
         if ($remote && version_compare($remote->version, '1.0', '>')) {
             $plugin = plugin_basename(__FILE__);
             $transient->response[$plugin] = (object) [
-                'slug' => 'mi-plugin',
-                'new_version' => $remote->version,
-                'url' => 'https://tu-servidor.com',
-                'package' => $remote->download_url,
+                        'slug' => 'mi-plugin',
+                        'new_version' => $remote->version,
+                        'url' => 'https://tu-servidor.com',
+                        'package' => $remote->download_url,
             ];
         }
     }
 
     return $transient;
+}
+
+function zona_paciente_obtener_facturas($token) {
+    $data = [
+        'token' => $token,
+        'controller' => 'facturas',
+        'action' => 'listadov2'
+    ];
+    return zona_paciente_apicall($data);
+}
+
+function zona_paciente_obtener_citas($token) {
+    $data = [
+        'token' => $token,
+        'controller' => 'citas',
+        'action' => 'listado',
+        'max2weeks' => 1
+    ];
+    return zona_paciente_apicall($data);
+}
+
+function zona_paciente_apicall($data) {
+    $url = 'https://neuroredacer.es/api/index.php';
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url . '?' . http_build_query($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    if (curl_errno($ch)) {
+        return 'Error:' . curl_error($ch);
+    } else {
+        // Mostrar la respuesta
+        return $response;
+    }
+    curl_close($ch);
 }
