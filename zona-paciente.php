@@ -293,7 +293,7 @@ function zona_paciente_comprobar_actualizacion($transient) {
         return $transient;
 
     // URL del archivo JSON
-    $remote = wp_remote_get('https://tu-servidor.com/mi-plugin-update.json');
+    $remote = wp_remote_get('https://repo-wp.amprogramacion.es/zona-paciente.json');
 
     if (!is_wp_error($remote) && isset($remote['response']['code']) && $remote['response']['code'] == 200) {
         $remote = json_decode($remote['body']);
